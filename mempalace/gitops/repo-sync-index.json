@@ -1,0 +1,15 @@
+{
+  "repo": "otto-kernel",
+  "syncedAt": "2026-07-03T15:18:09Z",
+  "targetVersion": "0.2.0",
+  "manifestConsistency": "validated",
+  "schemaConsistency": "validated",
+  "versionStatus": "aligned",
+  "releasePrep": "in_progress",
+  "commit": {
+    "status": "pending"
+  },
+  "push": {
+    "status": "pending"
+  }
+}
