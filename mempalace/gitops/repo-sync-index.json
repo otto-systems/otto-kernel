@@ -14,7 +14,7 @@
   "push": {
     "status": "pushed"
   },
-  "updatedAt": "2026-07-03T15:24:49.438Z",
+  "updatedAt": "2026-07-03T15:26:09.398Z",
   "releaseVersion": "0.2.0",
   "releaseMetadata": {
     "channel": "stable",
@@ -29,5 +29,10 @@
   "tags": {
     "status": "pushed",
     "name": "v0.2.0"
+  },
+  "release": {
+    "status": "published",
+    "tag": "v0.2.0",
+    "url": "https://github.com/otto-systems/otto-kernel/releases/tag/v0.2.0"
   }
 }
