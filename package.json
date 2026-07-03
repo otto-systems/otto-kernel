@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@otto/protocol": "workspace:*"
+    "@otto/protocol": "file:../otto-protocol"
   },
   "devDependencies": {
     "typescript": "^5.5.4"

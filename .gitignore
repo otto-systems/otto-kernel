@@ -23,3 +23,7 @@ target
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+
+# Node/TypeScript build artifacts
+node_modules/
+dist/
