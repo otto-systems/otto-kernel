@@ -1,38 +1,42 @@
 {
-  "repo": "otto-kernel",
-  "syncedAt": "2026-07-03T16:00:14.258Z",
-  "targetVersion": "0.2.1",
-  "manifestConsistency": "validated",
-  "schemaConsistency": "validated",
-  "versionStatus": "aligned",
-  "releasePrep": "completed",
-  "commit": {
-    "status": "committed",
-    "hash": "c78e6046e9fd6df48c246be176b01b88b5adb7e9",
-    "message": "release 0.2.1 metadata aligned to current HEAD"
-  },
-  "push": {
-    "status": "pushed"
-  },
-  "updatedAt": "2026-07-03T16:00:14.258Z",
-  "releaseVersion": "0.2.1",
-  "releaseMetadata": {
-    "channel": "stable",
-    "updateManifest": "manifests/release-0.2.1.json",
-    "latestManifest": "manifests/latest.json"
-  },
-  "validation": {
-    "typescriptNoEmit": "pass"
-  },
-  "syncStage": "post_release_stabilization",
-  "releaseTag": "v0.2.1",
-  "tags": {
-    "status": "pushed",
-    "name": "v0.2.1"
-  },
-  "release": {
-    "status": "published",
-    "tag": "v0.2.1",
-    "url": "https://github.com/otto-systems/otto-kernel/releases/tag/v0.2.1"
-  }
+    "repo":  "otto-kernel",
+    "syncedAt":  "2026-08-02T22:30:00.000Z",
+    "targetVersion":  "0.2.2",
+    "manifestConsistency":  "validated",
+    "schemaConsistency":  "validated",
+    "versionStatus":  "aligned_local_workspace",
+    "releasePrep":  "completed",
+    "commit":  {
+                   "status":  "committed",
+                   "hash":  "c78e6046e9fd6df48c246be176b01b88b5adb7e9",
+                   "message":  "release 0.2.1 metadata aligned to current HEAD"
+               },
+    "push":  {
+                 "status":  "pushed"
+             },
+    "updatedAt":  "2026-08-02T22:30:00.000Z",
+    "releaseVersion":  "0.2.1",
+    "releaseMetadata":  {
+                            "channel":  "stable",
+                            "updateManifest":  "manifests/release-0.2.1.json",
+                            "latestManifest":  "manifests/latest.json"
+                        },
+    "validation":  {
+                       "typescriptNoEmit":  "pass"
+                   },
+    "syncStage":  "tracer_bullet_validation",
+    "releaseTag":  "v0.2.1",
+    "tags":  {
+                 "status":  "pushed",
+                 "name":  "v0.2.1"
+             },
+    "release":  {
+                    "status":  "published",
+                    "tag":  "v0.2.1",
+                    "url":  "https://github.com/otto-systems/otto-kernel/releases/tag/v0.2.1"
+                },
+    "latestSync":  {
+                       "summary":  "Patch bump plus tracer-bullet validation sync",
+                       "date":  "2026-08-02T22:30:00.000Z"
+                   }
 }
