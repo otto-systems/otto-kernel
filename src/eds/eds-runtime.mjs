@@ -222,15 +222,6 @@ function buildDependencyLookup(dependencyIndex) {
   return lookup;
 }
 
-function buildCatalogIndex(dependencyIndex) {
-  const catalog = new Map();
-  for (const entry of dependencyIndex?.dependencies || []) {
-    catalog.set(entry.id, entry);
-  }
-
-  return catalog;
-}
-
 function detectDependencyCycles(extensions, edgeMap) {
   const extensionNames = new Set(extensions.map((entry) => entry.name));
   const visited = new Set();
@@ -267,7 +258,44 @@ function detectDependencyCycles(extensions, edgeMap) {
   return cycles;
 }
 
-function buildDependencySummary(extension, dependencyRecord, versionsByName) {
+function buildRegistryIndexes(extensions) {
+  const extensionIds = new Set();
+  const commandContracts = new Set();
+  const apiContracts = new Set();
+  const toolDependencies = new Set();
+
+  for (const extension of extensions) {
+    extensionIds.add(extension.id);
+
+    for (const contract of extension.commandContracts || []) {
+      if (contract?.id) {
+        commandContracts.add(contract.id);
+      }
+    }
+
+    for (const apiContract of extension.apiContracts || []) {
+      if (apiContract?.command) {
+        apiContracts.add(apiContract.command);
+      }
+      if (apiContract?.route) {
+        apiContracts.add(apiContract.route);
+      }
+    }
+
+    for (const tool of extension.toolsProvided || []) {
+      toolDependencies.add(tool);
+    }
+  }
+
+  return {
+    extensionIds,
+    commandContracts,
+    apiContracts,
+    toolDependencies
+  };
+}
+
+function buildDependencyValidation(extension, dependencyRecord, versionsByName, indexes) {
   const dependencyMetadata = dependencyRecord?.dependencyMetadata || {
     requiredExtensions: [],
     optionalExtensions: [],
@@ -275,25 +303,52 @@ function buildDependencySummary(extension, dependencyRecord, versionsByName) {
     apiDependencies: [],
     toolDependencies: [],
     versionConstraints: {},
+    compatibilityMetadata: { versionConstraints: {} },
     installFootprint: []
   };
+
+  const missingRequiredExtensions = (dependencyMetadata.requiredExtensions || []).filter((name) => !indexes.extensionIds.has(name));
+  const missingOptionalExtensions = (dependencyMetadata.optionalExtensions || []).filter((name) => !indexes.extensionIds.has(name));
+  const missingContractDependencies = (dependencyMetadata.contractDependencies || []).filter((name) => !indexes.commandContracts.has(name));
+  const missingApiDependencies = (dependencyMetadata.apiDependencies || []).filter((name) => !indexes.apiContracts.has(name));
+  const missingToolDependencies = (dependencyMetadata.toolDependencies || []).filter((name) => !indexes.toolDependencies.has(name));
 
   const versionStatuses = Object.entries(dependencyMetadata.versionConstraints || {}).map(([name, constraint]) => ({
     name,
     constraint,
     actualVersion: versionsByName[name] || null,
-    satisfied: versionsByName[name] ? satisfiesVersion(versionsByName[name], constraint) : false
+    satisfied: !versionsByName[name] || satisfiesVersion(versionsByName[name], constraint)
   }));
 
-  const missingRequiredExtensions = (dependencyMetadata.requiredExtensions || []).filter((name) => !versionsByName[name]);
+  const compatibilityStatuses = Object.entries(dependencyMetadata.compatibilityMetadata?.versionConstraints || {}).map(([name, constraint]) => ({
+    name,
+    constraint,
+    actualVersion: versionsByName[name] || null,
+    satisfied: !versionsByName[name] || satisfiesVersion(versionsByName[name], constraint)
+  }));
 
   return {
     dependencyMetadata,
     dependencyValidation: {
       missingRequiredExtensions,
+      missingOptionalExtensions,
+      missingContractDependencies,
+      missingApiDependencies,
+      missingToolDependencies,
       versionStatuses,
-      satisfied: missingRequiredExtensions.length === 0 && versionStatuses.every((status) => status.satisfied),
-      dependencyCount: (dependencyMetadata.requiredExtensions || []).length + (dependencyMetadata.optionalExtensions || []).length
+      compatibilityStatuses,
+      compatibilitySatisfied: compatibilityStatuses.every((status) => status.satisfied),
+      satisfied:
+        missingRequiredExtensions.length === 0 &&
+        missingContractDependencies.length === 0 &&
+        missingApiDependencies.length === 0 &&
+        missingToolDependencies.length === 0 &&
+        versionStatuses.every((status) => status.satisfied) &&
+        compatibilityStatuses.every((status) => status.satisfied),
+      dependencyCount: (dependencyMetadata.requiredExtensions || []).length + (dependencyMetadata.optionalExtensions || []).length,
+      contractDependencyCount: (dependencyMetadata.contractDependencies || []).length,
+      apiDependencyCount: (dependencyMetadata.apiDependencies || []).length,
+      toolDependencyCount: (dependencyMetadata.toolDependencies || []).length
     }
   };
 }
@@ -341,15 +396,31 @@ async function scanExtension(workspaceRoot, extensionPath, dependencyLookup, ver
   const commandsDir = path.join(extensionPath, "commands");
   const apisDir = path.join(extensionPath, "apis");
   const toolsDir = path.join(extensionPath, "tools");
+  const srcSchemasDir = path.join(extensionPath, "src", "schemas");
+  const srcCommandsDir = path.join(extensionPath, "src", "commands");
+  const srcApisDir = path.join(extensionPath, "src", "apis");
+  const srcToolsDir = path.join(extensionPath, "src", "tools");
 
   const packageJson = await readJson(packagePath);
   const moduleJson = await readJson(modulePath);
 
-  const manifestFiles = await listJsonFiles(manifestsDir);
-  const contractFiles = await listJsonFiles(contractsDir);
-  const commandFiles = await listJsonFiles(commandsDir);
-  const apiFiles = await listJsonFiles(apisDir);
-  const toolFiles = await listJsonFiles(toolsDir);
+  const [manifestBaseFiles, contractBaseFiles, commandBaseFiles, apiBaseFiles, toolBaseFiles, srcSchemaFiles, srcCommandFiles, srcApiFiles, srcToolFiles] = await Promise.all([
+    listJsonFiles(manifestsDir),
+    listJsonFiles(contractsDir),
+    listJsonFiles(commandsDir),
+    listJsonFiles(apisDir),
+    listJsonFiles(toolsDir),
+    listJsonFiles(srcSchemasDir),
+    listJsonFiles(srcCommandsDir),
+    listJsonFiles(srcApisDir),
+    listJsonFiles(srcToolsDir)
+  ]);
+
+  const manifestFiles = [...new Set([...manifestBaseFiles, ...srcSchemaFiles])];
+  const contractFiles = [...new Set([...contractBaseFiles, ...srcSchemaFiles])];
+  const commandFiles = [...new Set([...commandBaseFiles, ...srcCommandFiles])];
+  const apiFiles = [...new Set([...apiBaseFiles, ...srcApiFiles])];
+  const toolFiles = [...new Set([...toolBaseFiles, ...srcToolFiles])];
 
   const manifestJson = await Promise.all(manifestFiles.map((filePath) => readJson(filePath)));
   const contractJson = await Promise.all(contractFiles.map((filePath) => readJson(filePath)));
@@ -392,8 +463,6 @@ async function scanExtension(workspaceRoot, extensionPath, dependencyLookup, ver
     dependencyLookup.get(String(extensionId).toLowerCase()) ||
     dependencyLookup.get(path.basename(extensionPath).toLowerCase());
   const toolDependencies = detectTools(metadata.manifests, moduleJson);
-  const dependencySummary = buildDependencySummary({ name: extensionId }, dependencyRecord, versionsByName);
-
   return {
     id: extensionId,
     name,
@@ -411,8 +480,7 @@ async function scanExtension(workspaceRoot, extensionPath, dependencyLookup, ver
       ...toolJson.flatMap((entry) => (Array.isArray(entry?.tools) ? entry.tools : []))
     ]),
     installFootprint,
-    dependencyMetadata: dependencyRecord?.dependencyMetadata || null,
-    dependencyValidation: dependencyRecord ? dependencySummary.dependencyValidation : null
+    dependencyMetadata: dependencyRecord?.dependencyMetadata || null
   };
 }
 
@@ -429,9 +497,17 @@ async function readRegistry(workspaceRoot) {
 }
 
 function buildRegistryValidation(extensions, dependencyLookup, versionsByName) {
+  const indexes = buildRegistryIndexes(extensions);
   const edgeMap = new Map();
   const missingRequiredExtensions = [];
   const versionConflicts = [];
+  const missingOptionalExtensions = [];
+  const missingContractDependencies = [];
+  const missingApiDependencies = [];
+  const missingToolDependencies = [];
+  const compatibilityConflicts = [];
+
+  const validationById = new Map();
 
   for (const extension of extensions) {
     const dependencyRecord = dependencyLookup.get(String(extension.id).toLowerCase()) || dependencyLookup.get(String(extension.path).toLowerCase());
@@ -440,23 +516,47 @@ function buildRegistryValidation(extensions, dependencyLookup, versionsByName) {
 
     edgeMap.set(extension.id, requiredExtensions);
 
-    for (const requiredExtension of requiredExtensions) {
-      if (!extensions.some((entry) => entry.id === requiredExtension || entry.path.endsWith(`/${requiredExtension}`))) {
-        missingRequiredExtensions.push({
+    const validation = buildDependencyValidation(extension, dependencyRecord, versionsByName, indexes).dependencyValidation;
+    validationById.set(extension.id, validation);
+
+    for (const item of validation.missingRequiredExtensions) {
+      missingRequiredExtensions.push({ extension: extension.id, requiredExtension: item });
+    }
+
+    for (const item of validation.missingOptionalExtensions) {
+      missingOptionalExtensions.push({ extension: extension.id, optionalExtension: item });
+    }
+
+    for (const item of validation.missingContractDependencies) {
+      missingContractDependencies.push({ extension: extension.id, contractDependency: item });
+    }
+
+    for (const item of validation.missingApiDependencies) {
+      missingApiDependencies.push({ extension: extension.id, apiDependency: item });
+    }
+
+    for (const item of validation.missingToolDependencies) {
+      missingToolDependencies.push({ extension: extension.id, toolDependency: item });
+    }
+
+    for (const status of validation.versionStatuses) {
+      if (!status.satisfied) {
+        versionConflicts.push({
           extension: extension.id,
-          requiredExtension
+          dependency: status.name,
+          constraint: status.constraint,
+          actualVersion: status.actualVersion
         });
       }
     }
 
-    for (const [dependencyName, constraint] of Object.entries(dependencyMetadata?.versionConstraints || {})) {
-      const actualVersion = versionsByName[dependencyName];
-      if (actualVersion && !satisfiesVersion(actualVersion, constraint)) {
-        versionConflicts.push({
+    for (const status of validation.compatibilityStatuses) {
+      if (!status.satisfied) {
+        compatibilityConflicts.push({
           extension: extension.id,
-          dependency: dependencyName,
-          constraint,
-          actualVersion
+          dependency: status.name,
+          constraint: status.constraint,
+          actualVersion: status.actualVersion
         });
       }
     }
@@ -465,12 +565,22 @@ function buildRegistryValidation(extensions, dependencyLookup, versionsByName) {
   const cycles = detectDependencyCycles(extensions, edgeMap);
 
   return {
+    validationById,
     missingRequiredExtensions,
+    missingOptionalExtensions,
+    missingContractDependencies,
+    missingApiDependencies,
+    missingToolDependencies,
     versionConflicts,
+    compatibilityConflicts,
     cycles,
     satisfied:
       missingRequiredExtensions.length === 0 &&
+      missingContractDependencies.length === 0 &&
+      missingApiDependencies.length === 0 &&
+      missingToolDependencies.length === 0 &&
       versionConflicts.length === 0 &&
+      compatibilityConflicts.length === 0 &&
       cycles.length === 0
   };
 }
@@ -503,6 +613,13 @@ export async function edsScan(input = {}) {
   }
 
   const validation = buildRegistryValidation(extensions, dependencyState.dependencyLookup, dependencyState.versionsByName);
+  const indexes = buildRegistryIndexes(extensions);
+  const dependencyValidationById = validation.validationById || new Map();
+  const enrichedExtensions = extensions.map((extension) => ({
+    ...extension,
+    dependencyValidation: dependencyValidationById.get(extension.id) || null,
+    dependencyMetadata: extension.dependencyMetadata || null
+  }));
   const registry = {
     generatedAt: new Date().toISOString(),
     workspaceRoot,
@@ -510,8 +627,14 @@ export async function edsScan(input = {}) {
     dependencyIndexPath: path.join(workspaceRoot, META_DEPENDENCY_INDEX_PATH).replace(/\\/g, "/"),
     dependencyIndexGeneratedAt: dependencyState.dependencyIndex?.generatedAt || null,
     dependencyValidation: validation,
+    dependencyIndexes: {
+      extensionIds: [...indexes.extensionIds],
+      commandContracts: [...indexes.commandContracts],
+      apiContracts: [...indexes.apiContracts],
+      toolDependencies: [...indexes.toolDependencies]
+    },
     extensionCount: extensions.length,
-    extensions: extensions.sort((left, right) => left.name.localeCompare(right.name))
+    extensions: enrichedExtensions.sort((left, right) => left.name.localeCompare(right.name))
   };
 
   const registryFile = await writeRegistry(workspaceRoot, registry);
